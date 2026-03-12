@@ -4,6 +4,18 @@ This repository contains the server-side implementation for the MCP Scene Genera
 
 ## 1. Preparation & Setup
 
+### 1.0 Background Layout Data Preparations
+SAGE retrieves door textures from the objathor dataset. Please follow the following instructions:
+
+Download the data by running the following commands:
+```bash
+python -m objathor.dataset.download_holodeck_base_data --version 2023_09_23
+python -m objathor.dataset.download_assets --version 2023_09_23
+python -m objathor.dataset.download_annotations --version 2023_09_23
+python -m objathor.dataset.download_features --version 2023_09_23
+```
+by default these will save to `~/.objathor-assets/...`.
+
 ### 1.1 Start the TRELLIS Server
 Refer to the startup script of trellis. We hosted with docker on remote cluster.
 ```bash
