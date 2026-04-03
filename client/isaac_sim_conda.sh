@@ -7,8 +7,8 @@ set -e
 
 # Configuration
 CONDA_ENV_NAME="simgen"
-ISAACSIM_PATH="/home/hongchix/main/isaacsim"
-ISAACLAB_PATH="/home/hongchix/main/IsaacLab"
+ISAACSIM_PATH="/home/tiger/isaacsim"
+ISAACLAB_PATH="/home/tiger/sage/IsaacLab"
 
 echo "[INFO] Starting Isaac Sim with conda environment '${CONDA_ENV_NAME}'..."
 which python
