@@ -1,4 +1,10 @@
 #!/bin/bash
+function red_echo()
+{
+    # ANSI: background red (41), foreground white (37)
+    printf '\033[41;37m%s\033[0m\n' "$*"
+}
+
 function get_script_path()
 {
     if [ -n "$BASH_SOURCE" ]; then
@@ -38,8 +44,10 @@ set_proxy
 uv tool install rich-cli
 REQUIRED_VERSION_MAJOR=535
 REQUIRED_VERSION_MINOR=129
+red_echo "[Vulkan] Minimum required driver: $REQUIRED_VERSION_MAJOR.$REQUIRED_VERSION_MINOR"
 rich -p "[bold cyan]> Checking available Vulkan drivers for IsaacSim...(Minimum required version: $REQUIRED_VERSION_MAJOR.$REQUIRED_VERSION_MINOR)[/]"
 DRV_HEX=$(vulkaninfo 2>&1 | awk '/driverVersion/ {print $3}')
+red_echo "[Vulkan] Parsed driverVersion(hex/int): ${DRV_HEX:-<empty>}"
 VERSIONS=( $DRV_HEX )
 FIND_AVAILABLE_DRIVER=false
 for DRV in ${VERSIONS[@]}; do
@@ -49,6 +57,7 @@ for DRV in ${VERSIONS[@]}; do
     # RTX gate
     if [ $MAJOR -lt $REQUIRED_VERSION_MAJOR ] || \
     { [ $MAJOR -eq $REQUIRED_VERSION_MAJOR ] && [ $MINOR -lt $REQUIRED_VERSION_MINOR ]; }; then
+        red_echo "[Vulkan] Unsupported driver: $MAJOR.$MINOR.$PATCH (need >= $REQUIRED_VERSION_MAJOR.$REQUIRED_VERSION_MINOR)"
         rich -p "[dim]   Unsupported driver: $MAJOR.$MINOR.$PATCH[/]"
     else
         rich -p "[bold green]   Found available driver: $MAJOR.$MINOR.$PATCH[/]"
@@ -57,6 +66,7 @@ for DRV in ${VERSIONS[@]}; do
     fi
 done
 if [ "$FIND_AVAILABLE_DRIVER" = false ]; then
+    red_echo "[Vulkan] No available driver found. Exiting."
     rich -p "[bold red]> No available driver can be found on this machine, maybe you want add this IP to blacklist?[/]"
     if [ -n "$MY_HOST_IP" ]; then
         rich -p "[bold dim]   $MY_HOST_IP[/]"
