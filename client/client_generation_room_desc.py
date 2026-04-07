@@ -407,10 +407,10 @@ class MCPClientOAI:
         self.MODEL_NAME = key_dict["MODEL_NAME"]
 
         # Initialize OpenAI client with Qwen3-VL endpoint
-        self.openai_client = openai.OpenAI(
-            base_url=API_URL_QWEN,
-            api_key=API_TOKEN
-        )
+        # self.openai_client = openai.OpenAI(
+        #     base_url=API_URL_QWEN,
+        #     api_key=API_TOKEN
+        # )
         
         # Use messages list format for chat completions
         self.messages: List[Dict[str, Any]] = []
@@ -741,7 +741,8 @@ class MCPClientOAI:
                     
                     # Create a bash command that sets up conda env and runs the script
                     bash_command = (
-                        f"source ~/.bashrc && "
+                        # f"source ~/.bashrc && "
+                        f"source /home/tiger/miniconda3/etc/profile.d/conda.sh && "
                         f"conda activate simgen && "
                         f"cd {SERVER_DIR} && "
                         f"export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH && "
@@ -1005,7 +1006,7 @@ class MCPClientOAI:
         available_tools = self.get_all_tools()
 
         # Main conversation loop (like Claude Desktop)
-        max_iterations = 200  # Prevent infinite loops
+        max_iterations = 20  # Prevent infinite loops
         iteration = 0
         intermediate_responses_shown = False
         
@@ -1055,7 +1056,12 @@ class MCPClientOAI:
                             print(f"⏳ Retry attempt {retry + 1}/{max_retry} after {wait_time}s delay...", file=sys.stderr)
                             time.sleep(wait_time)
                         
-                        response = self.openai_client.chat.completions.create(**call_params)
+                        # response = self.openai_client.chat.completions.create(**call_params)
+                        import requests
+                        import json
+                        url = "http://[2605:340:cd51:4900:65d4:a9ae:f110:103d]:8090/v1/chat/completions"
+                        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(call_params))
+                        response = response.json()
                         
                         # Track token usage if available in response
                         if hasattr(response, 'usage'):
@@ -1094,29 +1100,65 @@ class MCPClientOAI:
             reasoning_text = None
             
             # Extract the message from response
+            # try:
+            #     message = response.choices[0].message
+                
+            #     # Extract text content
+            #     if hasattr(message, 'content') and message.content:
+            #         text_responses.append(message.content)
+            #         print(f"📝 Response content: {len(message.content)} chars")
+                
+            #     # Extract reasoning if available (Qwen thinking model specific)
+            #     if hasattr(message, 'reasoning') and message.reasoning:
+            #         reasoning_text = message.reasoning
+            #         print(f"🧠 Reasoning available: {len(reasoning_text)} chars")
+                
+            #     # Extract tool calls from API response
+            #     if hasattr(message, 'tool_calls') and message.tool_calls:
+            #         tool_calls = message.tool_calls
+            #         print(f"🔧 Found {len(tool_calls)} tool call(s) in API response")
+                
+            #     # If no tool calls in API response, try parsing from content
+            #     # (Qwen sometimes formats tool calls as <tool_call> XML tags in content)
+            #     if not tool_calls and message.content and '<tool_call>' in message.content:
+            #         print(f"🔍 No tool calls in API response, parsing from content...")
+            #         parsed_tool_calls = self.parse_tool_calls_from_content(message.content)
+            #         if parsed_tool_calls:
+            #             # Convert parsed dict format to object-like format
+            #             class ToolCall:
+            #                 def __init__(self, data):
+            #                     self.id = data['id']
+            #                     self.type = data['type']
+            #                     self.function = type('Function', (), {
+            #                         'name': data['function']['name'],
+            #                         'arguments': data['function']['arguments']
+            #                     })()
+                        
+            #             tool_calls = [ToolCall(tc) for tc in parsed_tool_calls]
+            #             print(f"🔧 Parsed {len(tool_calls)} tool call(s) from content")
+
             try:
-                message = response.choices[0].message
+                message = response['choices'][0]['message']
                 
                 # Extract text content
-                if hasattr(message, 'content') and message.content:
-                    text_responses.append(message.content)
-                    print(f"📝 Response content: {len(message.content)} chars")
+                if 'content' in message and message['content']:
+                    text_responses.append(message['content'])
+                    print(f"📝 Response content: {len(message['content'])} chars")
                 
                 # Extract reasoning if available (Qwen thinking model specific)
-                if hasattr(message, 'reasoning') and message.reasoning:
-                    reasoning_text = message.reasoning
+                if 'reasoning' in message and message['reasoning']:
+                    reasoning_text = message['reasoning']
                     print(f"🧠 Reasoning available: {len(reasoning_text)} chars")
                 
                 # Extract tool calls from API response
-                if hasattr(message, 'tool_calls') and message.tool_calls:
-                    tool_calls = message.tool_calls
+                tool_calls = message.get('tool_calls', [])
+                if tool_calls:
                     print(f"🔧 Found {len(tool_calls)} tool call(s) in API response")
                 
                 # If no tool calls in API response, try parsing from content
-                # (Qwen sometimes formats tool calls as <tool_call> XML tags in content)
-                if not tool_calls and message.content and '<tool_call>' in message.content:
+                if not tool_calls and message.get('content') and '<tool_call>' in message['content']:
                     print(f"🔍 No tool calls in API response, parsing from content...")
-                    parsed_tool_calls = self.parse_tool_calls_from_content(message.content)
+                    parsed_tool_calls = self.parse_tool_calls_from_content(message['content'])
                     if parsed_tool_calls:
                         # Convert parsed dict format to object-like format
                         class ToolCall:

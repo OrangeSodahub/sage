@@ -760,7 +760,8 @@ class MCPClientOAI:
                     
                     # Create a bash command that sets up conda env and runs the script
                     bash_command = (
-                        f"source ~/.bashrc && "
+                        # f"source ~/.bashrc && "
+                        f"source /home/tiger/miniconda3/etc/profile.d/conda.sh && "
                         f"conda activate simgen && "
                         f"cd {SERVER_DIR} && "
                         f"export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH && "

@@ -1,5 +1,5 @@
 {
-    "API_TOKEN": "",
-    "API_URL_QWEN": "",
+    "API_TOKEN": "YOUR_API_TOKEN",
+    "API_URL_QWEN": "http://[2605:340:cd51:4900:65d4:a9ae:f110:103d]:8090",
     "MODEL_NAME": "Qwen3-VL-32B-Thinking"
 }

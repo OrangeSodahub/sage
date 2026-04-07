@@ -1,39 +1,47 @@
-apt update
-apt-get install libx11-6 -y
-apt-get install libgl1 -y
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh -b
-/root/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-/root/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-/root/miniconda3/bin/conda create -n trellis -y python=3.10
-/root/miniconda3/bin/conda init
-source /root/.bashrc
-source /root/miniconda3/bin/activate trellis
-git clone --recurse-submodules https://github.com/microsoft/TRELLIS.git
+export https_proxy=http://sys-proxy-rd-relay.byted.org:8118 http_proxy=http://sys-proxy-rd-relay.byted.org:8118 no_proxy="*.byted.org" 
+export HF_ENDPOINT="https://hf-mirror.com"
+
+HF_TOKEN=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
+# sudo apt update
+# sudo apt-get install libx11-6 -y
+# sudo apt-get install libgl1 -y
+# wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+# bash Miniconda3-latest-Linux-x86_64.sh -b
+# /root/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+# /root/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+# /root/miniconda3/bin/conda create -n trellis -y python=3.10
+# /root/miniconda3/bin/conda init
+# /home/tiger/miniconda3/bin/conda create -n trellis -y python=3.10
+# /home/tiger/miniconda3/bin/conda init
+# source /home/tiger/.bashrc
+# source /home/tiger/miniconda3/bin/activate trellis
+# source /root/.bashrc
+# source /root/miniconda3/bin/activate trellis
+# git clone --recurse-submodules https://github.com/microsoft/TRELLIS.git
 cd TRELLIS
-pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124
-pip install spconv-cu120
-pip install imageio[ffmpeg]
-pip install easydict
-pip install rembg
-pip install numpy==1.26
-pip install onnxruntime
-pip install transformers==4.53.2
-pip install xformers==0.0.27.post2
-pip install open3d
-pip install plyfile
-pip install git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
-pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
-pip install git+https://github.com/NVlabs/nvdiffrast.git
-pip install trimesh
-pip install xatlas
-pip install pyvista
-pip install pymeshfix
-pip install igraph
-pip install "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization/" --no-build-isolation
+# pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124
+# pip install spconv-cu120
+# pip install imageio[ffmpeg]
+# pip install easydict
+# pip install rembg
+# pip install numpy==1.26
+# pip install onnxruntime
+# pip install transformers==4.53.2
+# pip install xformers==0.0.27.post2
+# pip install open3d
+# pip install plyfile
+# pip install git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8 --no-build-isolation
+# pip install kaolin -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
+# pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
+# pip install trimesh
+# pip install xatlas
+# pip install pyvista
+# pip install pymeshfix
+# pip install igraph
+# pip install "git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodules/diff-gaussian-rasterization/" --no-build-isolation
 hf auth login --token ${HF_TOKEN}
 export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
-pip install flask werkzeug psutil flask-cors requests
+# pip install flask werkzeug psutil flask-cors requests
 echo "import os
 import io
 import tempfile
@@ -53,7 +61,7 @@ import torch
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='TRELLIS 3D Generation Server')
-parser.add_argument('--port', type=int, default=8080, help='Port to run the server on')
+parser.add_argument('--port', type=int, default=8085, help='Port to run the server on')
 parser.add_argument('--gpu', type=int, default=None, help='GPU ID to use (for logging purposes)')
 args = parser.parse_args()
 
@@ -698,7 +706,7 @@ def check_worker_health(worker_url):
 @app.route('/', methods=['GET'])
 def root():
     network_ip = get_network_ip()
-    port = 8080
+    port = 8085
     return jsonify({
         'service': 'TRELLIS 3D Generation API (Central Distributor)',
         'version': '1.0.0',
@@ -953,7 +961,7 @@ if __name__ == '__main__':
         print('No worker servers specified')
     
     network_ip = get_network_ip()
-    port = 8080
+    port = 8085
     
     print('=' * 60)
     print('🚀 TRELLIS Central Distribution Server')
@@ -976,14 +984,14 @@ echo "Found $GPU_COUNT GPUs"
 
 if [ $GPU_COUNT -eq 0 ]; then
     echo "No GPUs available. Starting single CPU server..."
-    python server.py --port 8080
+    python server.py --port 8085
     exit 0
 fi
 
 # Start worker servers on each GPU
 WORKER_URLS=""
 for ((i=0; i<$GPU_COUNT; i++)); do
-    PORT=$((8081 + i))
+    PORT=$((8086 + i))
     echo "Starting worker server on GPU $i, port $PORT..."
     CUDA_VISIBLE_DEVICES=$i python server.py --port $PORT --gpu $i &
     
@@ -1005,5 +1013,5 @@ echo "Waiting for workers to be ready..."
 sleep 10
 
 # Start central distributor server
-echo "Starting central distributor server on port 8080..."
+echo "Starting central distributor server on port 8085..."
 python central_server.py "$WORKER_URLS"

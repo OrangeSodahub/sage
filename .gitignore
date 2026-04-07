@@ -1,1 +1,11 @@
 .DS_Store
+
+.vscode/
+Miniconda3*
+TRELLIS/
+isaacsim/
+taming-transformers/
+pytorch3d/
+
+gpu*.py
+isaac*.zip

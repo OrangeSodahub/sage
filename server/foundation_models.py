@@ -24,7 +24,8 @@ def init_clip():
         _,
         clip_preprocess,
     ) = open_clip.create_model_and_transforms(
-        "ViT-L-14", pretrained="laion2b_s32b_b82k", device="cpu"
+        # "ViT-L-14", pretrained="laion2b_s32b_b82k", device="cpu"
+        "ViT-L-14", pretrained="/mnt/hdfs/yxy/checkpoints/CLIP-ViT-L-14/open_clip_pytorch_model.bin", device="cpu"
     )
     print("loaded clip model")
     print("loading clip tokenizer")
@@ -35,7 +36,8 @@ def init_clip():
 def init_sbert():
     # initialize sentence transformer
     print("loading sbert_model")
-    sbert_model = SentenceTransformer("all-mpnet-base-v2", device="cpu")
+    # sbert_model = SentenceTransformer("all-mpnet-base-v2", device="cpu")
+    sbert_model = SentenceTransformer("/mnt/hdfs/yxy/checkpoints/all-mpnet-base-v2", device="cpu")
     print("loaded sbert_model")
     return sbert_model
 

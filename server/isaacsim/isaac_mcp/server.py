@@ -37,7 +37,6 @@ SOFTWARE.
 """
 
 # isaac_sim_mcp_server.py
-import time
 from mcp.server.fastmcp import FastMCP, Context, Image
 import socket
 import json
@@ -45,16 +44,19 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any, List
+from typing import AsyncIterator, Dict, Any, List, Optional
 import os
 from pathlib import Path
 import base64
 from urllib.parse import urlparse
-import sys
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("IsaacMCPServer")
+
+# Per-recv timeout while waiting for Isaac TCP JSON responses (e.g. long simulate_the_scene).
+# Default 30m: simulate often exceeds 5m; override with ISAAC_MCP_RECV_TIMEOUT_SEC (seconds).
+ISAAC_MCP_RECV_TIMEOUT_SEC = float(os.environ.get("ISAAC_MCP_RECV_TIMEOUT_SEC", "3000"))
 
 @dataclass
 class IsaacConnection:
@@ -90,14 +92,18 @@ class IsaacConnection:
     def receive_full_response(self, sock, buffer_size=16384):
         """Receive the complete response, potentially in multiple chunks"""
         chunks = []
-        # Use a consistent timeout value that matches the addon's timeout
-        sock.settimeout(300.0)  # Match the extension's timeout
+        sock.settimeout(ISAAC_MCP_RECV_TIMEOUT_SEC)
         
         try:
+            first_recv = True
             while True:
                 try:
-                    logger.info("Waiting for data from Isaac")
-                    time.sleep(1.0)
+                    if first_recv:
+                        logger.info(
+                            "Waiting for data from Isaac (recv timeout %.0fs; set ISAAC_MCP_RECV_TIMEOUT_SEC to change)",
+                            ISAAC_MCP_RECV_TIMEOUT_SEC,
+                        )
+                        first_recv = False
                     chunk = sock.recv(buffer_size)
                     if not chunk:
                         # If we get an empty chunk, the connection might be closed
@@ -143,7 +149,11 @@ class IsaacConnection:
                 # If we can't parse it, it's incomplete
                 raise Exception("Incomplete JSON response received")
         else:
-            raise Exception("No data received")
+            raise Exception(
+                f"No data from Isaac within {ISAAC_MCP_RECV_TIMEOUT_SEC:.0f}s per recv. "
+                "Increase ISAAC_MCP_RECV_TIMEOUT_SEC, check Isaac Sim/extension logs (asyncio errors delay send), "
+                "and ensure no proxy/SSH idle timeout closes the connection."
+            )
 
     def send_command(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Send a command to Isaac and return the response"""
@@ -163,8 +173,7 @@ class IsaacConnection:
             self.sock.sendall(json.dumps(command).encode('utf-8'))
             logger.info(f"Command sent, waiting for response...")
             
-            # Set a timeout for receiving - use the same timeout as in receive_full_response
-            self.sock.settimeout(300.0)  # Match the extension's timeout
+            self.sock.settimeout(ISAAC_MCP_RECV_TIMEOUT_SEC)
             
             # Receive the response using the improved receive_full_response method
             response_data = self.receive_full_response(self.sock)
@@ -270,10 +279,61 @@ def slurm_job_id_to_port(job_id, port_start=8080, port_end=40000):
     return mapped_port
 
 
+def _read_port_from_json_file(path: str) -> Optional[int]:
+    try:
+        with open(path, "r") as f:
+            state = json.load(f)
+        return int(state["port"])
+    except Exception:
+        return None
+
+
 def get_port():
-    slurm_job_id = os.environ.get("SLURM_JOB_ID")
-    port = slurm_job_id_to_port(slurm_job_id)
-    print(f"Isaacsim MCP server port: {port}", file=sys.stderr)
+    """
+    Resolve MCP TCP port. Order must match how Isaac extension publishes the port.
+
+    1) ISAAC_MCP_PORT — explicit override (must be set in the *same process* that runs the client).
+    2) ISAAC_MCP_PORT_FILE — path to JSON {\"host\":\"...\",\"port\":N} from extension.
+    3) /tmp/isaac_mcp_port_latest.json — written by extension on bind (works when SLURM_JOB_ID differs).
+    4) /tmp/isaac_mcp_port_${SLURM_JOB_ID}.json — per-job file.
+    5) hash(SLURM_JOB_ID) — legacy; often wrong if env not passed to client.
+    """
+    env_port = os.environ.get("ISAAC_MCP_PORT")
+    if env_port:
+        port = int(env_port)
+        logger.info("Isaacsim MCP server port (from ISAAC_MCP_PORT): %s", port)
+        return port
+
+    port_file = os.environ.get("ISAAC_MCP_PORT_FILE")
+    if port_file and os.path.exists(port_file):
+        p = _read_port_from_json_file(port_file)
+        if p is not None:
+            logger.info("Isaacsim MCP server port (from ISAAC_MCP_PORT_FILE=%s): %s", port_file, p)
+            return p
+        logger.warning("ISAAC_MCP_PORT_FILE set but unreadable: %s", port_file)
+
+    latest_default = "/tmp/isaac_mcp_port_latest.json"
+    latest_path = os.environ.get("ISAAC_MCP_PORT_LATEST_FILE", latest_default)
+    if os.path.exists(latest_path):
+        p = _read_port_from_json_file(latest_path)
+        if p is not None:
+            logger.info("Isaacsim MCP server port (from latest state file %s): %s", latest_path, p)
+            return p
+
+    slurm_job_id = os.environ.get("SLURM_JOB_ID", "noslurm")
+    job_path = f"/tmp/isaac_mcp_port_{slurm_job_id}.json"
+    if os.path.exists(job_path):
+        p = _read_port_from_json_file(job_path)
+        if p is not None:
+            logger.info("Isaacsim MCP server port (from state file %s): %s", job_path, p)
+            return p
+
+    port = slurm_job_id_to_port(os.environ.get("SLURM_JOB_ID"))
+    logger.info(
+        "Isaacsim MCP server port (from SLURM hash; set ISAAC_MCP_PORT or ensure extension wrote %s): %s",
+        latest_path,
+        port,
+    )
     return port
 
 def get_isaac_connection():
@@ -595,17 +655,13 @@ def get_room_layout_scene_usd_separate_from_layout(layout_json_path: str, usd_co
         return f'error: {"status": "error", "error": str(e), "message": "Error get_room_layout_scene_usd_separate"}'
 
 
-def simulate_the_scene() -> str:
+def simulate_the_scene() -> Dict[str, Any]:
     """
     Simulate the scene. Before simulate the scene, you need to call create_room_layout_scene(scene_save_dir) first to create the scene.
 
-
     Returns:
-        String with the result of the simulation. Each item in the dictionary is a key-value pair.
-        The key is the object id in the simulation.
-
-        The value is a dictionary with the following keys:
-
+        On success: dict from Isaac (includes status, unstable_objects, ...).
+        On failure: dict with status \"error\" and unstable_objects [] (never a str).
     """
     try:
         isaac = get_isaac_connection()
@@ -618,9 +674,14 @@ def simulate_the_scene() -> str:
         return result
     except Exception as e:
         logger.error(f"Error simulate_the_scene: {str(e)}")
-        return str({"status": "error", "error": str(e), "message": "Error simulate_the_scene"})
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Error simulate_the_scene",
+            "unstable_objects": [],
+        }
 
-def simulate_the_scene_groups() -> str:
+def simulate_the_scene_groups() -> Dict[str, Any]:
     """
     Simulate the scene. Before simulate the scene, you need to call create_room_layout_scene(scene_save_dir) first to create the scene.
     """
@@ -630,7 +691,12 @@ def simulate_the_scene_groups() -> str:
         return result
     except Exception as e:
         logger.error(f"Error simulate_the_scene_groups: {str(e)}")
-        return str({"status": "error", "error": str(e), "message": "Error simulate_the_scene_groups"})
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Error simulate_the_scene_groups",
+            "group_stable_list": "[]",
+        }
 
 
 def test_object_placements_in_single_room(room_dict_save_path: str, placements_info_path: str, only_need_one: bool = False):
@@ -839,4 +905,3 @@ def transform(
     except Exception as e:
         logger.error(f"Error transforming model: {str(e)}")
         return f"Error transforming model: {str(e)}"
-

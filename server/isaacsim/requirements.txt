@@ -1,0 +1,15 @@
+# Third-party deps for isaac.sim.mcp_extension (imported from extension.py / scene/utils.py / usd*.py / gen3d.py).
+# Install into Isaac Sim's Kit Python — NOT conda simgen, e.g.:
+#   cd /opt/tiger/sage-host/isaacsim   # or your ISAACSIM_ROOT
+#   ./python.sh -m pip install -U pip
+#   ./python.sh -m pip install -r /path/to/sage/server/isaacsim/isaac.sim.mcp_extension/requirements-kit-python.txt
+#
+# If Isaac ships a pinned numpy, skip upgrading: comment out numpy below or use --no-deps for scipy only after numpy works.
+numpy>=1.23,<2.1
+requests>=2.28
+trimesh>=4.0
+tqdm>=4.65
+sympy>=1.12
+scipy>=1.10
+xatlas>=0.0.9
+Pillow>=9.0
