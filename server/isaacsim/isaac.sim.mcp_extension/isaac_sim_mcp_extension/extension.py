@@ -163,7 +163,35 @@ class MCPExtension(omni.ext.IExt):
         self._text_prompt_cache = {} # cache for text prompt
         self.track_ids = []
 
+    def _write_mcp_port_state_files(self) -> None:
+        """Publish bound host/port so Python client can connect without matching SLURM_JOB_ID."""
+        state = {
+            "host": self.host,
+            "port": int(self.port),
+            "pid": os.getpid(),
+        }
+        latest = os.environ.get("ISAAC_MCP_PORT_LATEST_FILE", "/tmp/isaac_mcp_port_latest.json")
+        try:
+            with open(latest, "w") as f:
+                json.dump(state, f, indent=2)
+            print(f"Wrote MCP port state to {latest}")
+        except Exception as e:
+            print(f"Warning: could not write {latest}: {e}")
+        jid = os.environ.get("SLURM_JOB_ID", "noslurm")
+        job_path = f"/tmp/isaac_mcp_port_{jid}.json"
+        try:
+            with open(job_path, "w") as f:
+                json.dump(state, f, indent=2)
+            print(f"Wrote MCP port state to {job_path}")
+        except Exception as e:
+            print(f"Warning: could not write {job_path}: {e}")
+
     def get_port(self):
+        env_port = os.environ.get("ISAAC_MCP_PORT")
+        if env_port:
+            port = int(env_port)
+            print(f"Isaacsim MCP server port (from ISAAC_MCP_PORT): {port}", file=sys.stderr)
+            return port
         slurm_job_id = os.environ.get("SLURM_JOB_ID")
         port = slurm_job_id_to_port(slurm_job_id)
         return port
@@ -214,6 +242,7 @@ class MCPExtension(omni.ext.IExt):
             self.server_thread.start()
             
             print(f"Isaac Sim MCP server started on {self.host}:{self.port}")
+            self._write_mcp_port_state_files()
         except Exception as e:
             print(f"Failed to start server: {str(e)}")
             self.stop()
@@ -1173,7 +1202,16 @@ class MCPExtension(omni.ext.IExt):
                 position_simulated_relative = traced_data_object_to_place["final_position"]
                 orientation_simulated_relative = traced_data_object_to_place["final_orientation"]
                 rotation_matrix_simulated_relative = np.eye(4)
-                rotation_matrix_simulated_relative[:3, :3] = R.from_quat(orientation_simulated_relative, scalar_first=True).as_matrix()
+                # rotation_matrix_simulated_relative[:3, :3] = R.from_quat(orientation_simulated_relative, scalar_first=True).as_matrix()
+                # orientation_simulated_relative is [w, x, y, z]
+                quat_wxyz = np.asarray(orientation_simulated_relative, dtype=float)
+                try:
+                    rot3 = R.from_quat(quat_wxyz, scalar_first=True).as_matrix()
+                except TypeError:
+                    # Fallback for old SciPy without scalar_first kwarg
+                    quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]], dtype=float)
+                    rot3 = R.from_quat(quat_xyzw).as_matrix()
+                rotation_matrix_simulated_relative[:3, :3] = rot3
 
                 translation_matrix_simulated_relative = np.eye(4)
                 translation_matrix_simulated_relative[:3, 3] = position_simulated_relative
@@ -1825,6 +1863,3 @@ Suggestions:
                 "status": "error",
                 "message": str(e)
             }
-        
-
-    

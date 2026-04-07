@@ -15,6 +15,7 @@
 import json
 import os
 import time
+import requests
 import random
 import threading
 from datetime import datetime
@@ -492,15 +493,93 @@ def _call_claude_api(client, model, max_tokens, temperature, messages, thinking=
             messages=messages
         )
 
+
+def _chat_completion_obj_from_json(data: dict):
+    """Turn OpenAI-compatible JSON into an object OpenAIResponseAdapter / log_vlm_call expect."""
+    from types import SimpleNamespace
+
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Unexpected API response: {data!r}")
+
+    err = data.get("error")
+    if err is not None:
+        if isinstance(err, dict):
+            raise RuntimeError(err.get("message", err.get("type", str(err))))
+        raise RuntimeError(str(err))
+
+    raw_choices = data.get("choices") or []
+    if not raw_choices:
+        raise RuntimeError(f"API returned no choices: {data!r}")
+
+    choices_out = []
+    for i, ch in enumerate(raw_choices):
+        msg = ch.get("message") or {}
+        raw = msg.get("content")
+        if raw is None:
+            text = ""
+        elif isinstance(raw, str):
+            text = raw
+        else:
+            text = json.dumps(raw, ensure_ascii=False)
+        choices_out.append(
+            SimpleNamespace(
+                index=ch.get("index", i),
+                message=SimpleNamespace(role=msg.get("role", "assistant"), content=text),
+                finish_reason=ch.get("finish_reason"),
+            )
+        )
+
+    u = data.get("usage")
+    usage_obj = SimpleNamespace(**u) if isinstance(u, dict) else u
+
+    return SimpleNamespace(
+        id=data.get("id"),
+        model=data.get("model"),
+        choices=choices_out,
+        usage=usage_obj,
+        object=data.get("object"),
+        created=data.get("created"),
+    )
+
+
 @retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=60.0)
 def _call_openai_api(client, model, max_tokens, temperature, openai_messages):
-    """Internal function to make OpenAI API call - wrapped with retry logic."""
-    return client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=openai_messages,
-    )
+    """POST /chat/completions via requests (IPv6 bracket URLs work reliably); client supplies base_url/key."""
+    base = str(client.base_url).rstrip("/")
+    url = f"{base}/chat/completions"
+    key = getattr(client, "api_key", None) or API_TOKEN
+    if key is not None and hasattr(key, "get_secret_value"):
+        key = key.get_secret_value()
+
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": openai_messages,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+    r = requests.post(url, headers=headers, json=payload, timeout=600)
+    try:
+        data = r.json()
+    except Exception:
+        r.raise_for_status()
+        raise RuntimeError((r.text or "")[:2000]) from None
+
+    if not r.ok:
+        if isinstance(data, dict):
+            if "detail" in data:
+                raise RuntimeError(str(data["detail"]))
+            er = data.get("error")
+            if isinstance(er, dict):
+                raise RuntimeError(er.get("message", str(er)))
+            if er is not None:
+                raise RuntimeError(str(er))
+        raise RuntimeError(f"HTTP {r.status_code}: {data!r}")
+
+    return _chat_completion_obj_from_json(data)
 
 def _call_claude_with_retry(
     model, max_tokens, temperature, messages, thinking,

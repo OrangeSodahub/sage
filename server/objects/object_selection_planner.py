@@ -202,7 +202,7 @@ def select_objects(object_info_dict: dict, room: Room, existing_objects: List[Ob
     updated_recommendations = []
     
     # Use ThreadPoolExecutor with maximum 5 threads
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         # Submit all tasks and store futures with their corresponding object names to maintain order
         future_to_object_name = {}
         object_names_order = list(object_info_dict.keys())

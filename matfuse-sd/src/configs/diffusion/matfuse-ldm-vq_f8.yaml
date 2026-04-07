@@ -100,7 +100,7 @@ model:
         text_embed_config:
           target: ldm.modules.encoders.modules.FrozenCLIPSentenceEmbedder
           params:
-            version: sentence-transformers/clip-ViT-B-16
+            version: /mnt/hdfs/yxy/checkpoints/clip-ViT-B-16
         binary_encoder_config:
           target: ldm.modules.encoders.modules.SimpleEncoder
           params:
